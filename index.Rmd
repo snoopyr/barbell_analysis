@@ -1,0 +1,301 @@
+---
+title: "Prediction of barbell lifts"
+date: "6/6/2017"
+output:
+  html_document: default
+  html_notebook: default
+---
+
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+
+
+
+## Data
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har
+
+
+## Goal
+
+In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+The goal of the project is to predict the manner in which they did the exercise. (This is the "classe" variable in the training set.) 
+
+
+## Data cleaning
+
+Load libraries
+```{r}
+library(caret)
+library(car)
+library(plyr)
+library(dplyr)
+
+set.seed(12345)
+```
+
+Load data
+```{r}
+train_df <- read.csv("./pml-training.csv", 
+                     na.strings=c("","NA", "#DIV/0!"))
+test_df <- read.csv("./pml-testing.csv")
+
+
+#str(train_df)
+```
+
+Check dimensions, filter out NA's and remove unwanted columns.
+```{r}
+dim(train_df)
+
+# # check for na
+# ncols <- ncol(train_df)
+# for (i in 1:ncols){
+#     print(paste(i, mean(is.na(train_df[,i]))))
+# }
+# print(ncols)
+
+new_train_df <- train_df %>%
+    select(which(colMeans(is.na(.))<0.5)) %>%
+    filter(rowMeans(is.na(.)) < 1) %>%
+    select(-X, -user_name, -raw_timestamp_part_1,
+           -raw_timestamp_part_2, -cvtd_timestamp, 
+           -num_window, -new_window)
+
+dim(new_train_df)
+table(new_train_df[, 53])
+```
+
+## Data exploration
+
+```{r}
+total_feature <- which(grepl("^total", 
+                             colnames(new_train_df),
+                             ignore.case = FALSE))
+total_feature
+```
+
+Since there are a lot of data points, sampling a subset and
+plotting them to get a feel for the data.
+```{r}
+sample_train <- new_train_df[sample(nrow(new_train_df[, ]), 500),]
+sample_train <- sample_train %>%
+    select(c(total_feature, 53))
+
+scatterplotMatrix(sample_train)
+```
+
+Checking for data columns with near zero variance
+```{r}
+nzV <- nearZeroVar(new_train_df[1:52], saveMetrics=TRUE)
+if (any(nzV$nzV)) nzV else message("None with zero variance")
+```
+
+
+Checking for highly correlated variables.
+```{r}
+# # for our case
+tmp_df <- cor(new_train_df[1:52])
+tmp_op <- findCorrelation(tmp_df, cutoff = 0.99)
+tmp_op <- sort(tmp_op)
+reduced_data <- new_train_df[, -c(tmp_op)]
+dim(reduced_data)
+```
+
+
+## Analysis
+Using caret package. Partioning the training data into
+a training and test sample to 
+(i) train the models and 
+(ii) to obtain an estimate of the in-sample and out-of sample errors.
+
+```{r eval=FALSE}
+inTrain <- createDataPartition(y = new_train_df$classe,
+                               p = 0.75,
+                               times = 1,
+                               list = FALSE)
+training <- new_train_df[inTrain, ]
+testing <- new_train_df[-inTrain, ]
+```
+
+
+Do some preprocessing of the data:
+```{r eval=FALSE}
+# Standardizing the data
+preProcMethod = c("center", "scale")
+
+# set options for 10 fold cross validation 
+tctrl <- trainControl(method = "cv", number = 10,
+                      verboseIter = TRUE)
+# Formula for the training
+formula <- classe ~ .
+```
+
+This is a classification problem and there are several model options which can be used for prediction. The ones tested in this report are (i) classification tree (ii) random forest (iii) boost  and (iv) linear discriminant analysis.  Training the models one by one.
+
+(i) Train a classification tree:
+```{r eval=FALSE}
+set.seed(34543)
+modelFitRpart <- train(formula, data = new_train_df, 
+                       method="rpart",
+                       preProcess = preProcMethod,
+                       trControl = tctrl,
+                       subset = inTrain)
+
+```
+
+(ii) Train a random forest:
+```{r eval=FALSE}
+set.seed(34543)
+modelFitRF <- train(formula, data = new_train_df,
+                    method="rf",
+                    preProcess = preProcMethod,
+                    trControl = tctrl,
+                    subset = inTrain,
+                    prox = TRUE)
+```
+
+(iii) Train a boost model:
+```{r eval=FALSE}
+set.seed(34543)
+modelFitBoost <- train(formula, data = new_train_df, 
+                       method = "gbm",
+                       preProcess = preProcMethod,
+                       trControl = tctrl,
+                       subset = inTrain,
+                       verbose = FALSE)
+```
+
+(iv) and finally train a LDA model:
+```{r eval=FALSE}
+set.seed(34543)
+modelFitLDA <- train(formula, data = new_train_df, 
+                     method = "lda",
+                     preProcess = preProcMethod,
+                     trControl = tctrl,
+                     subset = inTrain)
+```
+
+Since these evaluations can take a long time, save the variables in a file.  This also aids in making the report.
+```{r eval=FALSE}
+save.image(file = "project.RData")
+```
+
+(For making the document, loading data from a saved session.)
+```{r}
+load("project.Rdata")
+```
+
+### In-sample error
+Based on the partitioning of the training dataset, we can estimate the in-sample error.
+```{r}
+# Accuracy comparison
+models_considered <- c("Class. Tree",
+           "Random Forest",
+           "Boost",
+           "LDA")
+
+model_Accuracy <- c(max(modelFitRpart$results$Accuracy),
+              max(modelFitRF$results$Accuracy),
+              max(modelFitBoost$results$Accuracy),
+              max(modelFitLDA$results$Accuracy))
+
+model_Kappa <- c(max(modelFitRpart$results$Kappa),
+           max(modelFitRF$results$Kappa),
+           max(modelFitBoost$results$Kappa),
+           max(modelFitLDA$results$Kappa))
+
+model_performance_summary <- cbind(models_considered,
+                                   model_Accuracy,
+                                   model_Kappa)
+
+model_performance_summary
+```
+
+
+### Out-of sample error
+Similarly by using the testing dataset, the out-of sample error can also be estimated. Note it is slightly more than the in-sample case.
+```{r}
+#Put all models into a list
+multi_models <- list(rpart = modelFitRpart,
+                     rf = modelFitRF,
+                     gbm = modelFitBoost,
+                     lda = modelFitLDA)
+
+#Run prediction across models
+multi_predict <- predict(multi_models, testing)
+
+#Create confusion matrix for each model
+saveCM <- lapply(multi_predict, FUN = confusionMatrix,
+       reference = testing$classe,
+       positive = "yes")
+
+
+predict_Accuracy <- c(saveCM$rpart$overall[1],
+                    saveCM$rf$overall[1],
+                    saveCM$gbm$overall[1],
+                    saveCM$lda$overall[1])
+
+predict_Kappa <- c(saveCM$rpart$overall[2],
+                      saveCM$rf$overall[2],
+                      saveCM$gbm$overall[2],
+                      saveCM$lda$overall[2])
+
+predict_performance_summary <- cbind(models_considered,
+                                   predict_Accuracy,
+                                   predict_Kappa)
+predict_performance_summary
+```
+
+The Random Forest method out-scores all the other models. It has an in-sample error of only 0.74% and an out-of sample error of 0.88%. 
+
+```{r}
+plot(modelFitRF, log = "y", lwd = 2, 
+     main = "Random forest", 
+     xlab = "#predictors", 
+     ylab = "Accuracy")
+```
+
+Summary of the final model (Random Forest):
+```{r}
+varImp(modelFitRF)
+modelFitRF$finalModel
+```
+
+Thus it is chosen at the candidate model to do the final prediction on the test data.
+
+## Apply to test conditions
+```{r}
+## Now let's apply to the test data
+predictionRF <- predict(modelFitRF, test_df)
+print(predictionRF)
+```
+
+Writing the output to files for submission.
+```{r}
+pml_write_files <- function(x){
+    for(i in 1:length(x)){
+        fnm = paste0("problem_id_",i,".txt")
+        write.table(x[i], file = fnm,
+                    quote = FALSE,
+                    row.names = FALSE,
+                    col.names = FALSE)
+    }
+}
+pml_write_files(predictionRF)
+```
+
+## Conclusion
+For this dataset, the Random Forest method resulted in superb accuracy.
+
