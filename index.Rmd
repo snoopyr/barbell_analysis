@@ -120,7 +120,7 @@ a training and test sample to
 (i) train the models and 
 (ii) to obtain an estimate of the in-sample and out-of sample errors.
 
-```{r eval=FALSE}
+```{r}
 inTrain <- createDataPartition(y = new_train_df$classe,
                                p = 0.75,
                                times = 1,
@@ -131,7 +131,7 @@ testing <- new_train_df[-inTrain, ]
 
 
 Do some preprocessing of the data:
-```{r eval=FALSE}
+```{r}
 # Standardizing the data
 preProcMethod = c("center", "scale")
 
@@ -145,7 +145,7 @@ formula <- classe ~ .
 This is a classification problem and there are several model options which can be used for prediction. The ones tested in this report are (i) classification tree (ii) random forest (iii) boost  and (iv) linear discriminant analysis.  Training the models one by one.
 
 (i) Train a classification tree:
-```{r eval=FALSE}
+```{r}
 set.seed(34543)
 modelFitRpart <- train(formula, data = new_train_df, 
                        method="rpart",
@@ -156,7 +156,7 @@ modelFitRpart <- train(formula, data = new_train_df,
 ```
 
 (ii) Train a random forest:
-```{r eval=FALSE}
+```{r}
 set.seed(34543)
 modelFitRF <- train(formula, data = new_train_df,
                     method="rf",
@@ -167,7 +167,7 @@ modelFitRF <- train(formula, data = new_train_df,
 ```
 
 (iii) Train a boost model:
-```{r eval=FALSE}
+```{r}
 set.seed(34543)
 modelFitBoost <- train(formula, data = new_train_df, 
                        method = "gbm",
@@ -178,7 +178,7 @@ modelFitBoost <- train(formula, data = new_train_df,
 ```
 
 (iv) and finally train a LDA model:
-```{r eval=FALSE}
+```{r}
 set.seed(34543)
 modelFitLDA <- train(formula, data = new_train_df, 
                      method = "lda",
@@ -188,7 +188,7 @@ modelFitLDA <- train(formula, data = new_train_df,
 ```
 
 Since these evaluations can take a long time, save the variables in a file.  This also aids in making the report.
-```{r eval=FALSE}
+```{r}
 save.image(file = "project.RData")
 ```
 
@@ -280,20 +280,6 @@ Thus it is chosen at the candidate model to do the final prediction on the test 
 ## Now let's apply to the test data
 predictionRF <- predict(modelFitRF, test_df)
 print(predictionRF)
-```
-
-Writing the output to files for submission.
-```{r}
-pml_write_files <- function(x){
-    for(i in 1:length(x)){
-        fnm = paste0("problem_id_",i,".txt")
-        write.table(x[i], file = fnm,
-                    quote = FALSE,
-                    row.names = FALSE,
-                    col.names = FALSE)
-    }
-}
-pml_write_files(predictionRF)
 ```
 
 ## Conclusion
